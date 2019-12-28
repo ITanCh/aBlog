@@ -1,0 +1,42 @@
+## Spring MVC 与 Web
+
+### IoC容器与Web容器的关系
+
+ServletContext为IoC容器提供了宿主环境。IoC容器通过ContexLoaderListener初始化建立，ContexLoaderListener是注册在Web容器中的监听器，当Web容器初始化时，监听器会收到该事件从而发起Spring容器的初始化。DispatchServlet是Spring MVC处理请求的转发器，从而响应HTTP的请求。
+
+ContexLoaderListener会调用ContextLoader，ContextLoader又会创建XmlWebApplicationContext，XmlWebApplicationContext作为默认的IoC容器，负责从默认的`/WEB-INF/applicationContext.xml`中加载BeanDefinition。
+
+ContextLoader在创建IoC容器XmlWebApplicationContext后会将其注册入servletContext的属性`ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE`中。
+
+
+### DispatchServlet的功能
+
+DispatchServlet负责两个工作，根据web.xml初始化自己的上下文，响应http请求。
+
+在ContextLoader加载完成后，开始DispatchServlet的初始化。首先从ServletContext中获取WebApplicationContext作为双亲上下文，这里就是XmlWebApplicationContext，所以XmlWebApplicationContext定义的Bean可以被DispatchServlet获取，在DispatchServlet中查找Bean时，会首先从双亲上下文中查找。获取双亲上下文后，DispatchServlet会创建自己的上下文，并且将其注册进ServletContext的属性中，属性名为该servlet相关的，因为一个Web容器可以有多个servlet。
+
+DispatchServlet上下文的初始化后会开始创建一些请求处理策略，如LocalResolver、HandlerMappings等。例如，初始化HandlerMappings就是从IoC容器中获取所有的HandlerMapping相关的Bean。
+
+HandlerMapping是对HTTP请求到controller的映射，HandlerMapping根据请求获取一个HandlerExecutionChain，其中包含了一个handler和多个interceptor，interceptor负责功能的增强。
+
+例如SimpleUrlHandlerMapping在初始化时会将url和对应handler的bean放入map中保存。当请求到达时，会从SimpleUrlHandlerMapping中查找最长匹配url的handler，包装成HandlerExecutionChain返回。
+
+### DispatchServlet处理请求的过程
+
+当请求到来，从所有的HandleMapping中依次查找到匹配的HandlerExecutionChain，多个HandleMapping是按照优先级排序的。
+
+HandlerExecutionChain获得后，先对请求执行intercepter的preHandler，然后执行handler，最后再次执行intercepter的postHandler，得到最终的ModelAndView对象。
+
+最后根据ModelAndView渲染视图并返回。
+
+### ModelAndView呈现给客户端的过程
+
+以JSP视图为例。
+
+Step1：ModelAndView获得后，会从中获取其对应的View，也就是根据ModelAndView指明的名称获得对应View的Bean。 
+
+Step2：View接着将数据进行合并，然后将数据放入requst中进行暴露。
+
+Step3：根据请求，获取URL路径，定位资源。如JSP文件。
+ 
+Step4：将包含数据的requst转发到目标资源路径，由web容器负责获取资源，并且将数据装入JSP。最后将拼装好的文件返回。
